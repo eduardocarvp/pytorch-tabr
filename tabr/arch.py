@@ -7,9 +7,9 @@ import faiss.contrib.torch_utils  # noqa  << this line makes faiss work with PyT
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.tensorboard
 from torch import Tensor
-from tabr.utils import OneHotEncoder, make_module
+from tabr.embeddings import OneHotEncoder, make_module
+from tabr.utils import define_device
 
 
 class TabR(nn.Module):
@@ -23,17 +23,17 @@ class TabR(nn.Module):
         bin_indices: list[int],
         n_classes: Optional[int],
         #
-        num_embeddings: Optional[dict],  # lib.deep.ModuleSpec
-        d_main: int,
-        d_multiplier: float,
-        encoder_n_blocks: int,
-        predictor_n_blocks: int,
-        mixer_normalization: Union[bool, Literal["auto"]],
-        context_dropout: float,
-        dropout0: float,
-        dropout1: Union[float, Literal["dropout0"]],
-        normalization: str,
-        activation: str,
+        num_embeddings: Optional[dict] = None,  # lib.deep.ModuleSpec
+        d_main: int = 96,
+        d_multiplier: float = 2.,
+        encoder_n_blocks: int = 0,
+        predictor_n_blocks: int = 1,
+        mixer_normalization: Union[bool, Literal["auto"]] = "auto",
+        context_dropout: float = 0,
+        dropout0: float = 0,
+        dropout1: Union[float, Literal["dropout0"]] = 0,
+        normalization: str = "LayerNorm",
+        activation: str = "ReLU",
         #
         # The following options should be used only when truly needed.
         memory_efficient: bool = False,
@@ -150,7 +150,7 @@ class TabR(nn.Module):
         del x
 
         x = []
-        if x_num is None:
+        if x_num.shape[1] == 0:
             assert self.num_embeddings is None
         else:
             x.append(
@@ -158,9 +158,9 @@ class TabR(nn.Module):
                 if self.num_embeddings is None
                 else self.num_embeddings(x_num).flatten(1)
             )
-        if x_bin is not None:
+        if x_bin.shape[1] != 0:
             x.append(x_bin)
-        if x_cat is None:
+        if x_cat.shape[1] == 0:
             assert self.one_hot_encoder is None
         else:
             assert self.one_hot_encoder is not None
@@ -174,6 +174,10 @@ class TabR(nn.Module):
         k = self.K(x if self.normalization is None else self.normalization(x))
         return x, k
 
+    # candidate_x = train - current_batch in training mode
+    # candidate_x = train in prediction mode
+    # we should make a function of dataset that removes the current batch in
+    # training time
     def forward(
         self,
         *,
@@ -182,7 +186,6 @@ class TabR(nn.Module):
         candidate_x: Tensor,
         candidate_y: Tensor,
         context_size: int,
-        is_train: bool,
     ) -> Tensor:
         # >>>
         with torch.set_grad_enabled(
@@ -217,7 +220,7 @@ class TabR(nn.Module):
                 )
             )
         x, k = self._encode(x)
-        if is_train:
+        if self.training:
             # NOTE: here, we add the training batch back to the candidates after the
             # function `apply_model` removed them. The further code relies
             # on the fact that the first batch_size candidates come from the
@@ -248,9 +251,9 @@ class TabR(nn.Module):
             distances: Tensor
             context_idx: Tensor
             distances, context_idx = self.search_index.search(  # type: ignore[code]
-                k, context_size + (1 if is_train else 0)
+                k, context_size + (1 if self.training else 0)
             )
-            if is_train:
+            if self.training:
                 # NOTE: to avoid leakage, the index i must be removed from the i-th row,
                 # (because of how candidate_k is constructed).
                 distances[
@@ -260,7 +263,7 @@ class TabR(nn.Module):
                 context_idx = context_idx.gather(-1, distances.argsort()[:, :-1])
 
         if self.memory_efficient and torch.is_grad_enabled():
-            assert is_train
+            assert self.training
             # Repeating the same computation,
             # but now only for the context objects and with autograd on.
             context_k = self._encode(
