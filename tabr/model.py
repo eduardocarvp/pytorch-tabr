@@ -63,7 +63,7 @@ class TabRClassifier(BaseEstimator):
         # These are default values needed for saving model
         self.batch_size = 1024
         self.virtual_batch_size = 128
-        self.loss_fn = F.binary_cross_entropy_with_logits
+        self.loss_fn = F.cross_entropy
 
         torch.manual_seed(self.seed)
         # Defining device
@@ -157,6 +157,8 @@ class TabRClassifier(BaseEstimator):
 
         self.update_fit_params(X_train, y_train, eval_set)
 
+        print(self.output_dim)
+
         if not hasattr(self, "network") or not warm_start:
             # model has never been fitted before of warm_start is False
             self._set_network()
@@ -182,7 +184,7 @@ class TabRClassifier(BaseEstimator):
         return
 
     def compute_loss(self, y_pred, y_true):
-        return self.loss_fn(y_pred, y_true.float())
+        return self.loss_fn(y_pred, y_true.long())
 
     def _train_batch(self, X, y, candidate_x, candidate_y, context_size):
         batch_logs = {"batch_size": X.shape[0]}
@@ -201,7 +203,7 @@ class TabRClassifier(BaseEstimator):
             context_size=context_size,
         )
 
-        loss = self.compute_loss(output.squeeze(-1), y)
+        loss = self.compute_loss(output, y)
 
         # Perform backward pass and optimization
         loss.backward()
@@ -253,7 +255,7 @@ class TabRClassifier(BaseEstimator):
                 candidate_y=self.y_train,
                 context_size=self.context_size,
             )
-            predictions = output.cpu().detach().numpy()
+            predictions = torch.nn.Softmax(dim=1)(output).cpu().detach().numpy()
             results.append(predictions)
         res = np.vstack(results)
         return res

@@ -121,11 +121,11 @@ class TabR(nn.Module):
             [make_block(True) for _ in range(predictor_n_blocks)]
         )
 
-        out_dim = 1 if n_classes is None or n_classes == 2 else n_classes
+        # out_dim = 1 if n_classes is None or n_classes == 2 else n_classes
         self.head = nn.Sequential(
             Normalization(d_main),
             Activation(),
-            nn.Linear(d_main, out_dim),
+            nn.Linear(d_main, n_classes),
         )
 
         # >>>
