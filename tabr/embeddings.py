@@ -42,7 +42,7 @@ class OneHotEncoder(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         encoded_columns = [
-            F.one_hot(x[..., column], cardinality)
+            F.one_hot(x[..., column].long(), int(cardinality))
             for column, cardinality in zip(range(x.shape[-1]), self.cardinalities)
         ]
 

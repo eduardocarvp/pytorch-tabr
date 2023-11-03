@@ -61,8 +61,7 @@ class TabRClassifier(BaseEstimator):
 
     def __post_init__(self):
         # These are default values needed for saving model
-        self.batch_size = 1024
-        self.virtual_batch_size = 128
+        self.batch_size = 256
         self.loss_fn = F.cross_entropy
 
         torch.manual_seed(self.seed)
@@ -156,8 +155,6 @@ class TabRClassifier(BaseEstimator):
         )
 
         self.update_fit_params(X_train, y_train, eval_set)
-
-        print(self.output_dim)
 
         if not hasattr(self, "network") or not warm_start:
             # model has never been fitted before of warm_start is False
