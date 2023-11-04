@@ -238,6 +238,7 @@ class TabR(nn.Module):
         # For smaller datasets, however, the naive solution can actually be faster.
         batch_size, d_main = k.shape
         device = k.device
+
         with torch.no_grad():
             if self.search_index is None:
                 self.search_index = (

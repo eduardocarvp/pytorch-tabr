@@ -12,6 +12,7 @@ import torch.nn.functional as F
 import scipy
 import warnings
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 from tabr.arch import TabR
 from tabr.utils import infer_output_dim, check_output_dim
 from tabr.dataloader import (
@@ -25,6 +26,8 @@ from tabr.dataloader import (
     check_warm_start,
     check_embedding_parameters,
 )
+from sklearn.metrics import roc_auc_score
+
 
 from sklearn.base import BaseEstimator
 from typing import Literal, Optional, Union
@@ -51,7 +54,7 @@ class TabRClassifier(BaseEstimator):
     activation: str = "ReLU"
     device_name: str = "auto"
     optimizer_fn: Any = torch.optim.Adam
-    optimizer_params: dict = field(default_factory=lambda: dict(lr=2e-2))
+    optimizer_params: dict = field(default_factory=lambda: dict(lr=2e-3))
     scheduler_fn: Any = None
     scheduler_params: dict = field(default_factory=dict)
     context_size: int = 96
@@ -87,7 +90,7 @@ class TabRClassifier(BaseEstimator):
             cat_cardinalities=self.cat_cardinalities,
             bin_indices=self.bin_indices,
             n_classes=self.output_dim,
-        )
+        ).to(self.device)
         return
 
     def update_fit_params(
@@ -118,7 +121,7 @@ class TabRClassifier(BaseEstimator):
         eval_metric=None,
         max_epochs=100,
         patience=10,
-        batch_size=16,
+        batch_size=256,
         num_workers=0,
         drop_last=True,
         pin_memory=True,
@@ -162,17 +165,37 @@ class TabRClassifier(BaseEstimator):
 
         self._set_optimizer()
 
-        for eval_name, valid_dataloader in zip(eval_names, valid_dataloaders):
-            self._predict_epoch(eval_name, valid_dataloader)
-
         for epoch in range(max_epochs):
             print(epoch)
             self._train_epoch(train_dataloader)
 
+            self.network.eval()
+            for eval_name, valid_dataloader in zip(eval_names, valid_dataloaders):
+                pred = []
+                ys = []
+                for batch_nb, (_, X, y) in enumerate(valid_dataloader):
+                    
+                    X = torch.Tensor(X).to(self.device).float()
+
+                    output = self.network(
+                        x=X,
+                        y=None,
+                        candidate_x=self.X_train,
+                        candidate_y=self.y_train,
+                        context_size=self.context_size,
+                    )
+                    predictions = torch.nn.Softmax(dim=1)(output).cpu().detach().numpy()
+                    pred.append(predictions)
+                    ys.append(y.cpu().detach().numpy().flatten())
+
+                pred = np.vstack(pred)
+                ys = np.hstack(ys)
+                print(roc_auc_score(y_score=pred[:,1], y_true=ys))
+        
     def _train_epoch(self, train_loader):
         self.network.train()
 
-        for batch_idx, (indices, X, y) in enumerate(train_loader):
+        for batch_idx, (indices, X, y) in enumerate(tqdm(train_loader)):
             candidate_indices = ~torch.isin(self.train_indices, indices)
             candidate_x = self.X_train[candidate_indices]
             candidate_y = self.y_train[candidate_indices]
@@ -188,6 +211,9 @@ class TabRClassifier(BaseEstimator):
 
         X = X.to(self.device).float()
         y = y.to(self.device).long()
+
+        candidate_x = candidate_x.to(self.device).float()
+        candidate_y = candidate_y.to(self.device).long()
 
         for param in self.network.parameters():
             param.grad = None

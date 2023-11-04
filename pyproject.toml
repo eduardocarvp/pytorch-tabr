@@ -20,9 +20,9 @@ plotly = "^5.17.0"
 pandas = "^2.1.1"
 ipywidgets = "^8.1.1"
 xgboost = "^2.0.0"
-faiss-cpu = "^1.7.4"
 delu = "^0.0.22"
 ipython = "^8.17.2"
+faiss-gpu = "^1.7.2"
 
 [build-system]
 requires = ["poetry-core"]
