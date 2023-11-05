@@ -13,7 +13,7 @@ import scipy
 from scipy.special import softmax
 import warnings
 from torch.utils.data import DataLoader
-from tqdm import tqdm
+from tqdm.notebook import tqdm
 from tabr.arch import TabR
 from tabr.utils import infer_output_dim, check_output_dim
 from tabr.dataloader import (
@@ -239,8 +239,8 @@ class TabRClassifier(BaseEstimator):
 
         eval_set = eval_set if eval_set else []
 
-        self.X_train = torch.Tensor(X_train)
-        self.y_train = torch.Tensor(y_train).long()
+        self.X_train = torch.Tensor(X_train).to(self.device)
+        self.y_train = torch.Tensor(y_train).to(self.device).long()
 
         # Validate and reformat eval set depending on training data
         eval_names, eval_set = validate_eval_set(eval_set, eval_name, X_train, y_train)
@@ -270,7 +270,7 @@ class TabRClassifier(BaseEstimator):
 
         self._callback_container.on_train_begin()
 
-        for epoch in range(max_epochs):
+        for epoch in tqdm(range(max_epochs), desc=" epochs", position=0):
             self._callback_container.on_epoch_begin(epoch)
 
             self._train_epoch(train_dataloader)
@@ -286,27 +286,27 @@ class TabRClassifier(BaseEstimator):
 
             self.network.eval()
 
-            for eval_name, valid_dataloader in zip(eval_names, valid_dataloaders):
-                pred = []
-                ys = []
-                for batch_nb, (_, X, y) in enumerate(valid_dataloader):
+            # for eval_name, valid_dataloader in zip(eval_names, valid_dataloaders):
+            #     pred = []
+            #     ys = []
+            #     for batch_nb, (_, X, y) in enumerate(valid_dataloader):
 
-                    X = torch.Tensor(X).to(self.device).float()
+            #         X = torch.Tensor(X).to(self.device).float()
 
-                    output = self.network(
-                        x=X,
-                        y=None,
-                        candidate_x=self.X_train,
-                        candidate_y=self.y_train,
-                        context_size=self.context_size,
-                    )
-                    predictions = torch.nn.Softmax(dim=1)(output).cpu().detach().numpy()
-                    pred.append(predictions)
-                    ys.append(y.cpu().detach().numpy().flatten())
+            #         output = self.network(
+            #             x=X,
+            #             y=None,
+            #             candidate_x=self.X_train,
+            #             candidate_y=self.y_train,
+            #             context_size=self.context_size,
+            #         )
+            #         predictions = torch.nn.Softmax(dim=1)(output).cpu().detach().numpy()
+            #         pred.append(predictions)
+            #         ys.append(y.cpu().detach().numpy().flatten())
 
-                pred = np.vstack(pred)
-                ys = np.hstack(ys)
-                print(roc_auc_score(y_score=pred[:,1], y_true=ys))
+            #     pred = np.vstack(pred)
+            #     ys = np.hstack(ys)
+            #     print(roc_auc_score(y_score=pred[:,1], y_true=ys))
 
             if self._stop_training:
                 break
@@ -349,6 +349,7 @@ class TabRClassifier(BaseEstimator):
         y_true, scores = self.stack_batches(list_y_true, list_y_score)
 
         metrics_logs = self._metric_container_dict[name](y_true, scores)
+        # print(metrics_logs)
         self.network.train()
         self.history.epoch_metrics.update(metrics_logs)
         return
@@ -388,7 +389,9 @@ class TabRClassifier(BaseEstimator):
     def _train_epoch(self, train_loader):
         self.network.train()
 
-        for batch_idx, (indices, X, y) in enumerate(tqdm(train_loader)):
+        for batch_idx, (indices, X, y) in enumerate(
+            tqdm(train_loader, desc=" batches", position=1, leave=False)
+        ):
             candidate_indices = ~torch.isin(self.train_indices, indices)
             candidate_x = self.X_train[candidate_indices]
             candidate_y = self.y_train[candidate_indices]

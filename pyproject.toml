@@ -23,6 +23,8 @@ xgboost = "^2.0.0"
 delu = "^0.0.22"
 ipython = "^8.17.2"
 faiss-gpu = "^1.7.2"
+ucimlrepo = "^0.0.3"
+catboost = "^1.2.2"
 
 [build-system]
 requires = ["poetry-core"]

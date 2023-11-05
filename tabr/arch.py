@@ -241,11 +241,18 @@ class TabR(nn.Module):
 
         with torch.no_grad():
             if self.search_index is None:
-                self.search_index = (
-                    faiss.GpuIndexFlatL2(faiss.StandardGpuResources(), d_main)
-                    if device.type == "cuda"
-                    else faiss.IndexFlatL2(d_main)
-                )
+                if device.type == "cuda":
+                    # build a flat (CPU) index
+                    index_flat = faiss.IndexFlatL2(d_main)
+                    # make it into a gpu index
+                    self.search_index = faiss.index_cpu_to_gpu(faiss.StandardGpuResources(), 0, index_flat)
+                else:
+                    self.search_index = faiss.IndexFlatL2(d_main)
+                # self.search_index = (
+                #     faiss.GpuIndexFlatL2(faiss.StandardGpuResources(), d_main)
+                #     if device.type == "cuda"
+                #     else faiss.IndexFlatL2(d_main)
+                # )
             # Updating the index is much faster than creating a new one.
             self.search_index.reset()
             self.search_index.add(candidate_k)  # type: ignore[code]
