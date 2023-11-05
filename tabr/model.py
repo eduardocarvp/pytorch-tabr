@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import scipy
+from scipy.special import softmax
 import warnings
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -26,6 +27,13 @@ from tabr.dataloader import (
     check_warm_start,
     check_embedding_parameters,
 )
+from tabr.callbacks import (
+    CallbackContainer,
+    History,
+    EarlyStopping,
+    LRSchedulerCallback,
+)
+from tabr.metrics import MetricContainer, check_metrics
 from sklearn.metrics import roc_auc_score
 
 
@@ -44,27 +52,29 @@ class TabRClassifier(BaseEstimator):
     num_embeddings: Optional[dict] = None  # lib.deep.ModuleSpec
     d_main: int = 96
     d_multiplier: float = 2.0
-    encoder_n_blocks: int = 0
-    predictor_n_blocks: int = 1
+    encoder_n_blocks: int = 2
+    predictor_n_blocks: int = 2
     mixer_normalization: Union[bool, Literal["auto"]] = "auto"
     context_dropout: float = 0
-    dropout0: float = 0
-    dropout1: Union[float, Literal["dropout0"]] = 0
+    dropout0: float = 0.5
+    dropout1: Union[float, Literal["dropout0"]] = 0.5
     normalization: str = "LayerNorm"
     activation: str = "ReLU"
     device_name: str = "auto"
     optimizer_fn: Any = torch.optim.Adam
-    optimizer_params: dict = field(default_factory=lambda: dict(lr=2e-3))
+    optimizer_params: dict = field(default_factory=lambda: dict(lr=2e-4))
     scheduler_fn: Any = None
     scheduler_params: dict = field(default_factory=dict)
     context_size: int = 96
+    memory_efficient: bool = False
+    candidate_encoding_batch_size: Optional[int] = None
     device_name: str = "cpu"
     seed: int = 0
     verbose: int = 0
 
     def __post_init__(self):
         # These are default values needed for saving model
-        self.batch_size = 256
+        # self.batch_size = 256
         self.loss_fn = F.cross_entropy
 
         torch.manual_seed(self.seed)
@@ -90,7 +100,97 @@ class TabRClassifier(BaseEstimator):
             cat_cardinalities=self.cat_cardinalities,
             bin_indices=self.bin_indices,
             n_classes=self.output_dim,
+            num_embeddings=self.num_embeddings,  # lib.deep.ModuleSpec
+            d_main=self.d_main,
+            d_multiplier=self.d_multiplier,
+            encoder_n_blocks=self.encoder_n_blocks,
+            predictor_n_blocks=self.predictor_n_blocks,
+            mixer_normalization=self.mixer_normalization,
+            context_dropout=self.context_dropout,
+            dropout0=self.dropout0,
+            dropout1=self.dropout1,
+            normalization=self.normalization,
+            activation=self.activation,
+            memory_efficient=self.memory_efficient,
+            candidate_encoding_batch_size=self.candidate_encoding_batch_size,
         ).to(self.device)
+        return
+
+    def _set_metrics(self, metrics, eval_names):
+        """Set attributes relative to the metrics.
+
+        Parameters
+        ----------
+        metrics : list of str
+            List of eval metric names.
+        eval_names : list of str
+            List of eval set names.
+
+        """
+        metrics = metrics or [self._default_metric]
+
+        metrics = check_metrics(metrics)
+        # Set metric container for each sets
+        self._metric_container_dict = {}
+        for name in eval_names:
+            self._metric_container_dict.update(
+                {name: MetricContainer(metrics, prefix=f"{name}_")}
+            )
+
+        self._metrics = []
+        self._metrics_names = []
+        for _, metric_container in self._metric_container_dict.items():
+            self._metrics.extend(metric_container.metrics)
+            self._metrics_names.extend(metric_container.names)
+
+        # Early stopping metric is the last eval metric
+        self.early_stopping_metric = (
+            self._metrics_names[-1] if len(self._metrics_names) > 0 else None
+        )
+
+    def _set_callbacks(self, custom_callbacks):
+        """Setup the callbacks functions.
+
+        Parameters
+        ----------
+        custom_callbacks : list of func
+            List of callback functions.
+
+        """
+        # Setup default callbacks history, early stopping and scheduler
+        callbacks = []
+        self.history = History(self, verbose=self.verbose)
+        callbacks.append(self.history)
+        if (self.early_stopping_metric is not None) and (self.patience > 0):
+            early_stopping = EarlyStopping(
+                early_stopping_metric=self.early_stopping_metric,
+                is_maximize=(
+                    self._metrics[-1]._maximize if len(self._metrics) > 0 else None
+                ),
+                patience=self.patience,
+            )
+            callbacks.append(early_stopping)
+        else:
+            wrn_msg = "No early stopping will be performed, last training weights will be used."
+            warnings.warn(wrn_msg)
+
+        if self.scheduler_fn is not None:
+            # Add LR Scheduler call_back
+            is_batch_level = self.scheduler_params.pop("is_batch_level", False)
+            scheduler = LRSchedulerCallback(
+                scheduler_fn=self.scheduler_fn,
+                scheduler_params=self.scheduler_params,
+                optimizer=self._optimizer,
+                early_stopping_metric=self.early_stopping_metric,
+                is_batch_level=is_batch_level,
+            )
+            callbacks.append(scheduler)
+
+        if custom_callbacks:
+            callbacks.extend(custom_callbacks)
+        self._callback_container = CallbackContainer(callbacks)
+        self._callback_container.set_trainer(self)
+
         return
 
     def update_fit_params(
@@ -123,6 +223,7 @@ class TabRClassifier(BaseEstimator):
         patience=10,
         batch_size=256,
         num_workers=0,
+        callbacks=None,
         drop_last=True,
         pin_memory=True,
         warm_start=False,
@@ -163,18 +264,33 @@ class TabRClassifier(BaseEstimator):
             # model has never been fitted before of warm_start is False
             self._set_network()
 
+        self._set_metrics(eval_metric, eval_names)
         self._set_optimizer()
+        self._set_callbacks(callbacks)
+
+        self._callback_container.on_train_begin()
 
         for epoch in range(max_epochs):
-            print(epoch)
+            self._callback_container.on_epoch_begin(epoch)
+
             self._train_epoch(train_dataloader)
 
+            # Apply predict epoch to all eval sets
+            for eval_name, valid_dataloader in zip(eval_names, valid_dataloaders):
+                self._predict_epoch(eval_name, valid_dataloader)
+
+            # Call method on_epoch_end for all callbacks
+            self._callback_container.on_epoch_end(
+                epoch, logs=self.history.epoch_metrics
+            )
+
             self.network.eval()
+
             for eval_name, valid_dataloader in zip(eval_names, valid_dataloaders):
                 pred = []
                 ys = []
                 for batch_nb, (_, X, y) in enumerate(valid_dataloader):
-                    
+
                     X = torch.Tensor(X).to(self.device).float()
 
                     output = self.network(
@@ -191,7 +307,84 @@ class TabRClassifier(BaseEstimator):
                 pred = np.vstack(pred)
                 ys = np.hstack(ys)
                 print(roc_auc_score(y_score=pred[:,1], y_true=ys))
-        
+
+            if self._stop_training:
+                break
+
+        # Call method on_train_end for all callbacks
+        self._callback_container.on_train_end()
+        self.network.eval()
+
+        return
+
+    def stack_batches(self, list_y_true, list_y_score):
+        y_true = np.hstack(list_y_true)
+        y_score = np.vstack(list_y_score)
+        y_score = softmax(y_score, axis=1)
+        return y_true, y_score
+
+    def _predict_epoch(self, name, loader):
+        """
+        Predict an epoch and update metrics.
+
+        Parameters
+        ----------
+        name : str
+            Name of the validation set
+        loader : torch.utils.data.Dataloader
+                DataLoader with validation set
+        """
+        # Setting network on evaluation mode
+        self.network.eval()
+
+        list_y_true = []
+        list_y_score = []
+
+        # Main loop
+        for batch_idx, (_, X, y) in enumerate(loader):
+            scores = self._predict_batch(X)
+            list_y_true.append(y)
+            list_y_score.append(scores)
+
+        y_true, scores = self.stack_batches(list_y_true, list_y_score)
+
+        metrics_logs = self._metric_container_dict[name](y_true, scores)
+        self.network.train()
+        self.history.epoch_metrics.update(metrics_logs)
+        return
+
+    def _predict_batch(self, X):
+        """
+        Predict one batch of data.
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Owned products
+
+        Returns
+        -------
+        np.array
+            model scores
+        """
+        X = X.to(self.device).float()
+
+        # compute model output
+        scores = self.network(
+            x=X,
+            y=None,
+            candidate_x=self.X_train,
+            candidate_y=self.y_train,
+            context_size=self.context_size,
+        )
+
+        if isinstance(scores, list):
+            scores = [x.cpu().detach().numpy() for x in scores]
+        else:
+            scores = scores.cpu().detach().numpy()
+
+        return scores
+
     def _train_epoch(self, train_loader):
         self.network.train()
 
@@ -200,6 +393,8 @@ class TabRClassifier(BaseEstimator):
             candidate_x = self.X_train[candidate_indices]
             candidate_y = self.y_train[candidate_indices]
             loss = self._train_batch(X, y, candidate_x, candidate_y, self.context_size)
+
+            self._callback_container.on_batch_end(batch_idx, loss)
 
         return
 

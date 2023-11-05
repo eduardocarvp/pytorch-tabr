@@ -26,12 +26,12 @@ class TabR(nn.Module):
         num_embeddings: Optional[dict] = None,  # lib.deep.ModuleSpec
         d_main: int = 96,
         d_multiplier: float = 2.,
-        encoder_n_blocks: int = 0,
-        predictor_n_blocks: int = 1,
+        encoder_n_blocks: int = 2,
+        predictor_n_blocks: int = 2,
         mixer_normalization: Union[bool, Literal["auto"]] = "auto",
         context_dropout: float = 0,
-        dropout0: float = 0,
-        dropout1: Union[float, Literal["dropout0"]] = 0,
+        dropout0: float = 0.5,
+        dropout1: Union[float, Literal["dropout0"]] = 0.5,
         normalization: str = "LayerNorm",
         activation: str = "ReLU",
         #
