@@ -3,6 +3,7 @@ import statistics
 from functools import partial
 from typing import Any, Callable, Optional, Union, cast
 
+import numpy as np
 import delu
 import torch
 import torch.nn as nn
@@ -47,6 +48,64 @@ class OneHotEncoder(nn.Module):
         ]
 
         return torch.cat(encoded_columns, -1)
+
+
+class EmbeddingGenerator(torch.nn.Module):
+    """
+    Classical embeddings generator
+    """
+
+    def __init__(self, input_dim, cat_dims, cat_idxs, cat_emb_dims):
+        """This is an embedding module for an entire set of features
+
+        Parameters
+        ----------
+        input_dim : int
+            Number of features coming as input (number of columns)
+        cat_dims : list of int
+            Number of modalities for each categorial features
+            If the list is empty, no embeddings will be done
+        cat_idxs : list of int
+            Positional index for each categorical features in inputs
+        cat_emb_dim : list of int
+            Embedding dimension for each categorical features
+            If int, the same embedding dimension will be used for all categorical features
+        """
+        super().__init__()
+
+        if cat_dims == [] and cat_idxs == []:
+            self.skip_embedding = True
+            self.post_embed_dim = input_dim
+            return
+        else:
+            self.skip_embedding = False
+
+        self.post_embed_dim = int(input_dim + np.sum(cat_emb_dims) - len(cat_emb_dims))
+
+        self.embeddings = torch.nn.ModuleList()
+
+        for cat_dim, emb_dim in zip(cat_dims, cat_emb_dims):
+            self.embeddings.append(torch.nn.Embedding(cat_dim, emb_dim))
+
+    def forward(self, x):
+        """
+        Apply embeddings to inputs
+        Inputs should be (batch_size, input_dim)
+        Outputs will be of size (batch_size, self.post_embed_dim)
+        """
+        if self.skip_embedding:
+            # no embeddings required
+            return x
+
+        cols = []
+        for feat_init_idx in range(x.shape[1]):
+            # Enumerate through continuous idx boolean mask to apply embeddings
+            cols.append(
+                self.embeddings[feat_init_idx](x[:, feat_init_idx].long())
+            )
+        # concat
+        post_embeddings = torch.cat(cols, dim=1)
+        return post_embeddings
 
 
 class CLSEmbedding(nn.Module):

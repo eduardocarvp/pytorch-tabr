@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from tabr.embeddings import OneHotEncoder, make_module
+from tabr.embeddings import OneHotEncoder, make_module, EmbeddingGenerator
 from tabr.utils import define_device
 
 
@@ -23,6 +23,8 @@ class TabR(nn.Module):
         bin_indices: list[int],
         n_classes: Optional[int],
         #
+        type_embeddings: str = None,
+        cat_emb_dims: int = 2,
         num_embeddings: Optional[dict] = None,  # lib.deep.ModuleSpec
         d_main: int = 96,
         d_multiplier: float = 2.,
@@ -63,9 +65,24 @@ class TabR(nn.Module):
             if i not in self.bin_indices and i not in self.cat_indices
         ]
 
-        self.one_hot_encoder = (
-            OneHotEncoder(cat_cardinalities) if cat_cardinalities else None
-        )
+        if self.n_cat_features == 0:
+            self.cat_encoder = None
+        else:
+            if type_embeddings is None or type_embeddings == "one-hot":
+                self.cat_encoder = (
+                    OneHotEncoder(cat_cardinalities) if cat_cardinalities else None
+                )
+                self.cat_post_embedding_size = sum(cat_cardinalities)
+            elif type_embeddings == "embeddings":
+                if isinstance(cat_emb_dims, int):
+                    cat_emb_dims = [cat_emb_dims for _ in range(len(cat_cardinalities))]
+                else:
+                    assert len(cat_emb_dims) == len(cat_cardinalities)
+                self.cat_encoder = EmbeddingGenerator(dim_input, cat_cardinalities, cat_indices, cat_emb_dims)
+                self.cat_post_embedding_size = sum(cat_emb_dims)
+            else:
+                raise ValueError("Embedding type not recognized.")
+
         self.num_embeddings = (
             None
             if num_embeddings is None
@@ -77,7 +94,7 @@ class TabR(nn.Module):
             self.n_num_features
             * (1 if num_embeddings is None else num_embeddings["d_embedding"])
             + self.n_bin_features
-            + sum(cat_cardinalities)
+            + self.cat_post_embedding_size
         )
         d_block = int(d_main * d_multiplier)
         Normalization = getattr(nn, normalization)
@@ -161,10 +178,10 @@ class TabR(nn.Module):
         if x_bin.shape[1] != 0:
             x.append(x_bin)
         if x_cat.shape[1] == 0:
-            assert self.one_hot_encoder is None
+            assert self.cat_encoder is None
         else:
-            assert self.one_hot_encoder is not None
-            x.append(self.one_hot_encoder(x_cat))
+            assert self.cat_encoder is not None
+            x.append(self.cat_encoder(x_cat))
         assert x
         x = torch.cat(x, dim=1)
 

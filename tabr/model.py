@@ -50,6 +50,8 @@ class TabRClassifier(BaseEstimator):
     cat_cardinalities: list[int] = field(default_factory=list)
     bin_indices: list[int] = field(default_factory=list)
     num_embeddings: Optional[dict] = None  # lib.deep.ModuleSpec
+    type_embeddings: str = None
+    cat_emb_dims: int = 2
     d_main: int = 96
     d_multiplier: float = 2.0
     encoder_n_blocks: int = 2
@@ -62,7 +64,7 @@ class TabRClassifier(BaseEstimator):
     activation: str = "ReLU"
     device_name: str = "auto"
     optimizer_fn: Any = torch.optim.Adam
-    optimizer_params: dict = field(default_factory=lambda: dict(lr=2e-4))
+    optimizer_params: dict = field(default_factory=lambda: dict(lr=2e-3))
     scheduler_fn: Any = None
     scheduler_params: dict = field(default_factory=dict)
     context_size: int = 96
@@ -100,6 +102,8 @@ class TabRClassifier(BaseEstimator):
             cat_cardinalities=self.cat_cardinalities,
             bin_indices=self.bin_indices,
             n_classes=self.output_dim,
+            type_embeddings=self.type_embeddings,
+            cat_emb_dims=self.cat_emb_dims,
             num_embeddings=self.num_embeddings,  # lib.deep.ModuleSpec
             d_main=self.d_main,
             d_multiplier=self.d_multiplier,
@@ -285,28 +289,6 @@ class TabRClassifier(BaseEstimator):
             )
 
             self.network.eval()
-
-            # for eval_name, valid_dataloader in zip(eval_names, valid_dataloaders):
-            #     pred = []
-            #     ys = []
-            #     for batch_nb, (_, X, y) in enumerate(valid_dataloader):
-
-            #         X = torch.Tensor(X).to(self.device).float()
-
-            #         output = self.network(
-            #             x=X,
-            #             y=None,
-            #             candidate_x=self.X_train,
-            #             candidate_y=self.y_train,
-            #             context_size=self.context_size,
-            #         )
-            #         predictions = torch.nn.Softmax(dim=1)(output).cpu().detach().numpy()
-            #         pred.append(predictions)
-            #         ys.append(y.cpu().detach().numpy().flatten())
-
-            #     pred = np.vstack(pred)
-            #     ys = np.hstack(ys)
-            #     print(roc_auc_score(y_score=pred[:,1], y_true=ys))
 
             if self._stop_training:
                 break
