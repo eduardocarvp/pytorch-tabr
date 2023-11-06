@@ -4,6 +4,7 @@ from typing import Literal, Optional, Union
 import delu
 import faiss
 import faiss.contrib.torch_utils  # noqa  << this line makes faiss work with PyTorch
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -27,7 +28,7 @@ class TabR(nn.Module):
         cat_emb_dims: int = 2,
         num_embeddings: Optional[dict] = None,  # lib.deep.ModuleSpec
         d_main: int = 96,
-        d_multiplier: float = 2.,
+        d_multiplier: float = 2.0,
         encoder_n_blocks: int = 2,
         predictor_n_blocks: int = 2,
         mixer_normalization: Union[bool, Literal["auto"]] = "auto",
@@ -36,6 +37,7 @@ class TabR(nn.Module):
         dropout1: Union[float, Literal["dropout0"]] = 0.5,
         normalization: str = "LayerNorm",
         activation: str = "ReLU",
+        context_sample_size: int = None,
         #
         # The following options should be used only when truly needed.
         memory_efficient: bool = False,
@@ -50,6 +52,8 @@ class TabR(nn.Module):
         super().__init__()
         if dropout1 == "dropout0":
             dropout1 = dropout0
+
+        self.context_sample_size = context_sample_size
 
         # numerical features
         self.n_bin_features = len(bin_indices)
@@ -67,6 +71,7 @@ class TabR(nn.Module):
 
         if self.n_cat_features == 0:
             self.cat_encoder = None
+            self.cat_post_embedding_size = 0
         else:
             if type_embeddings is None or type_embeddings == "one-hot":
                 self.cat_encoder = (
@@ -78,7 +83,9 @@ class TabR(nn.Module):
                     cat_emb_dims = [cat_emb_dims for _ in range(len(cat_cardinalities))]
                 else:
                     assert len(cat_emb_dims) == len(cat_cardinalities)
-                self.cat_encoder = EmbeddingGenerator(dim_input, cat_cardinalities, cat_indices, cat_emb_dims)
+                self.cat_encoder = EmbeddingGenerator(
+                    dim_input, cat_cardinalities, cat_indices, cat_emb_dims
+                )
                 self.cat_post_embedding_size = sum(cat_emb_dims)
             else:
                 raise ValueError("Embedding type not recognized.")
@@ -205,6 +212,13 @@ class TabR(nn.Module):
         context_size: int,
     ) -> Tensor:
         # >>>
+        if self.context_sample_size is not None and self.training:
+            subset = np.random.permutation(candidate_x.shape[0])[
+                : self.context_sample_size
+            ]
+            subset = torch.Tensor(subset).long()
+            candidate_x = candidate_x[subset]
+
         with torch.set_grad_enabled(
             torch.is_grad_enabled() and not self.memory_efficient
         ):
@@ -262,7 +276,9 @@ class TabR(nn.Module):
                     # build a flat (CPU) index
                     index_flat = faiss.IndexFlatL2(d_main)
                     # make it into a gpu index
-                    self.search_index = faiss.index_cpu_to_gpu(faiss.StandardGpuResources(), 0, index_flat)
+                    self.search_index = faiss.index_cpu_to_gpu(
+                        faiss.StandardGpuResources(), 0, index_flat
+                    )
                 else:
                     self.search_index = faiss.IndexFlatL2(d_main)
                 # self.search_index = (

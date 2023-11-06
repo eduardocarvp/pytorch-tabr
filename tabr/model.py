@@ -64,10 +64,11 @@ class TabRClassifier(BaseEstimator):
     activation: str = "ReLU"
     device_name: str = "auto"
     optimizer_fn: Any = torch.optim.Adam
-    optimizer_params: dict = field(default_factory=lambda: dict(lr=2e-3))
+    optimizer_params: dict = field(default_factory=lambda: dict(lr=2e-4))
     scheduler_fn: Any = None
     scheduler_params: dict = field(default_factory=dict)
     context_size: int = 96
+    context_sample_size: int = None
     memory_efficient: bool = False
     candidate_encoding_batch_size: Optional[int] = None
     device_name: str = "cpu"
@@ -115,6 +116,7 @@ class TabRClassifier(BaseEstimator):
             dropout1=self.dropout1,
             normalization=self.normalization,
             activation=self.activation,
+            context_sample_size=self.context_sample_size,
             memory_efficient=self.memory_efficient,
             candidate_encoding_batch_size=self.candidate_encoding_batch_size,
         ).to(self.device)
@@ -288,8 +290,6 @@ class TabRClassifier(BaseEstimator):
                 epoch, logs=self.history.epoch_metrics
             )
 
-            self.network.eval()
-
             if self._stop_training:
                 break
 
@@ -331,7 +331,7 @@ class TabRClassifier(BaseEstimator):
         y_true, scores = self.stack_batches(list_y_true, list_y_score)
 
         metrics_logs = self._metric_container_dict[name](y_true, scores)
-        # print(metrics_logs)
+        print(metrics_logs)
         self.network.train()
         self.history.epoch_metrics.update(metrics_logs)
         return
