@@ -99,7 +99,8 @@ class TabRBase(BaseEstimator):
             cat_indices=self.cat_indices,
             cat_cardinalities=self.cat_cardinalities,
             bin_indices=self.bin_indices,
-            n_classes=self.output_dim,
+            output_dim=self.output_dim,
+            embed_target=self.embed_target,
             type_embeddings=self.type_embeddings,
             cat_emb_dims=self.cat_emb_dims,
             num_embeddings=self.num_embeddings,  # lib.deep.ModuleSpec
@@ -196,25 +197,6 @@ class TabRBase(BaseEstimator):
 
         return
 
-    def update_fit_params(
-        self,
-        X_train,
-        y_train,
-        eval_set,
-    ):
-        output_dim, train_labels = infer_output_dim(y_train)
-        for X, y in eval_set:
-            check_output_dim(train_labels, y)
-        self.output_dim = output_dim
-        self._default_metric = "auc" if self.output_dim == 2 else "accuracy"
-        self.classes_ = train_labels
-        self.target_mapper = {
-            class_label: index for index, class_label in enumerate(self.classes_)
-        }
-        self.preds_mapper = {
-            str(index): class_label for index, class_label in enumerate(self.classes_)
-        }
-
     def fit(
         self,
         X_train,
@@ -243,7 +225,8 @@ class TabRBase(BaseEstimator):
         eval_set = eval_set if eval_set else []
 
         self.X_train = torch.Tensor(X_train).to(self.device)
-        self.y_train = torch.Tensor(y_train).to(self.device).long()
+        self.y_train = torch.Tensor(y_train).to(self.device)
+        self.y_train = self.convert_targets(self.y_train)[0]
 
         # Validate and reformat eval set depending on training data
         eval_names, eval_set = validate_eval_set(eval_set, eval_name, X_train, y_train)
@@ -378,10 +361,11 @@ class TabRBase(BaseEstimator):
         batch_logs = {"batch_size": X.shape[0]}
 
         X = X.to(self.device).float()
-        y = y.to(self.device).long()
+        y = y.to(self.device)
 
         candidate_x = candidate_x.to(self.device).float()
-        candidate_y = candidate_y.to(self.device).long()
+        candidate_y = candidate_y.to(self.device)
+        y, candidate_y = self.convert_targets(y, candidate_y)
 
         for param in self.network.parameters():
             param.grad = None

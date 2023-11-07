@@ -22,7 +22,8 @@ class TabR(nn.Module):
         cat_indices: list[int],
         cat_cardinalities: list[int],
         bin_indices: list[int],
-        n_classes: Optional[int],
+        output_dim: Optional[int],
+        embed_target: bool = True,
         #
         type_embeddings: str = None,
         cat_emb_dims: int = 2,
@@ -125,10 +126,10 @@ class TabR(nn.Module):
         # >>> R
         self.normalization = Normalization(d_main) if mixer_normalization else None
         self.label_encoder = (
-            nn.Linear(1, d_main)
-            if n_classes is None
+            nn.Linear(output_dim, d_main)
+            if embed_target is False
             else nn.Sequential(
-                nn.Embedding(n_classes, d_main), delu.nn.Lambda(lambda x: x.squeeze(-2))
+                nn.Embedding(output_dim, d_main),  # delu.nn.Lambda(lambda x: x.squeeze(-2))
             )
         )
         self.K = nn.Linear(d_main, d_main)
@@ -145,11 +146,11 @@ class TabR(nn.Module):
             [make_block(True) for _ in range(predictor_n_blocks)]
         )
 
-        # out_dim = 1 if n_classes is None or n_classes == 2 else n_classes
+        # out_dim = 1 if output_dim is None or output_dim == 2 else output_dim
         self.head = nn.Sequential(
             Normalization(d_main),
             Activation(),
-            nn.Linear(d_main, n_classes),
+            nn.Linear(d_main, output_dim),
         )
 
         # >>>
@@ -326,7 +327,7 @@ class TabR(nn.Module):
         probs = self.dropout(probs)
 
         context_y_emb = self.label_encoder(candidate_y[context_idx][..., None])
-        values = context_y_emb + self.T(k[:, None] - context_k)
+        values = context_y_emb.squeeze(-2) + self.T(k[:, None] - context_k)
         context_x = (probs[:, None] @ values).squeeze(1)
         x = x + context_x
 

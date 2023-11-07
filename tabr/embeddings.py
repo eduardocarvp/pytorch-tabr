@@ -366,10 +366,6 @@ def get_n_parameters(m: nn.Module):
     return sum(x.numel() for x in m.parameters() if x.requires_grad)
 
 
-def get_d_out(n_classes: Optional[int]) -> int:
-    return 1 if n_classes is None or n_classes == 2 else n_classes
-
-
 # ======================================================================================
 # >>> optimization <<<
 # ======================================================================================
