@@ -45,7 +45,7 @@ JSONDict = dict[str, Any]  # must be JSON-serializable
 
 
 @dataclass
-class TabRClassifier(BaseEstimator):
+class TabRBase(BaseEstimator):
     cat_indices: list[int] = field(default_factory=list)
     cat_cardinalities: list[int] = field(default_factory=list)
     bin_indices: list[int] = field(default_factory=list)
@@ -77,9 +77,6 @@ class TabRClassifier(BaseEstimator):
 
     def __post_init__(self):
         # These are default values needed for saving model
-        # self.batch_size = 256
-        self.loss_fn = F.cross_entropy
-
         torch.manual_seed(self.seed)
         # Defining device
         self.device = torch.device(define_device(self.device_name))
@@ -299,12 +296,6 @@ class TabRClassifier(BaseEstimator):
 
         return
 
-    def stack_batches(self, list_y_true, list_y_score):
-        y_true = np.hstack(list_y_true)
-        y_score = np.vstack(list_y_score)
-        y_score = softmax(y_score, axis=1)
-        return y_true, y_score
-
     def _predict_epoch(self, name, loader):
         """
         Predict an epoch and update metrics.
@@ -383,9 +374,6 @@ class TabRClassifier(BaseEstimator):
 
         return
 
-    def compute_loss(self, y_pred, y_true):
-        return self.loss_fn(y_pred, y_true.long())
-
     def _train_batch(self, X, y, candidate_x, candidate_y, context_size):
         batch_logs = {"batch_size": X.shape[0]}
 
@@ -432,33 +420,5 @@ class TabRClassifier(BaseEstimator):
         predictions : np.array
             Predictions of the regression problem
         """
-        self.network.eval()
-
-        if scipy.sparse.issparse(X):
-            dataloader = DataLoader(
-                SparsePredictDataset(X),
-                batch_size=self.batch_size,
-                shuffle=False,
-            )
-        else:
-            dataloader = DataLoader(
-                PredictDataset(X),
-                batch_size=self.batch_size,
-                shuffle=False,
-            )
-
-        results = []
-        for batch_nb, data in enumerate(dataloader):
-            data = torch.Tensor(data).to(self.device).float()
-
-            output = self.network(
-                x=data,
-                y=None,
-                candidate_x=self.X_train,
-                candidate_y=self.y_train,
-                context_size=self.context_size,
-            )
-            predictions = torch.nn.Softmax(dim=1)(output).cpu().detach().numpy()
-            results.append(predictions)
-        res = np.vstack(results)
-        return res
+        preds = self.predict_proba(X)
+        return self.predict_func(preds)
