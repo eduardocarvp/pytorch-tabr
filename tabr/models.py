@@ -106,9 +106,9 @@ class TabRClassifier(TabRBase):
 class TabRRegressor(TabRBase):
     def __post_init__(self):
         super().__post_init__()
-        self._task = 'regression'
+        self._task = "regression"
         self.loss_fn = torch.nn.functional.mse_loss
-        self._default_metric = 'mse'
+        self._default_metric = "mse"
 
     def convert_targets(self, *target_tensors):
         response = []
@@ -126,9 +126,11 @@ class TabRRegressor(TabRBase):
         eval_set,
     ):
         if len(y_train.shape) != 2:
-            msg = "Targets should be 2D : (n_samples, n_regression) " + \
-                  f"but y_train.shape={y_train.shape} given.\n" + \
-                  "Use reshape(-1, 1) for single regression."
+            msg = (
+                "Targets should be 2D : (n_samples, n_regression) "
+                + f"but y_train.shape={y_train.shape} given.\n"
+                + "Use reshape(-1, 1) for single regression."
+            )
             raise ValueError(msg)
         self.output_dim = y_train.shape[1]
         self.embed_target = False

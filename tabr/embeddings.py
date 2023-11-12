@@ -39,7 +39,7 @@ class OneHotEncoder(nn.Module):
     def __init__(self, cardinalities: list[int]) -> None:
         # cardinalities[i]`` is the number of unique values for the i-th categorical feature.
         super().__init__()
-        self.register_buffer('cardinalities', torch.tensor(cardinalities))
+        self.register_buffer("cardinalities", torch.tensor(cardinalities))
 
     def forward(self, x: Tensor) -> Tensor:
         encoded_columns = [
@@ -100,9 +100,7 @@ class EmbeddingGenerator(torch.nn.Module):
         cols = []
         for feat_init_idx in range(x.shape[1]):
             # Enumerate through continuous idx boolean mask to apply embeddings
-            cols.append(
-                self.embeddings[feat_init_idx](x[:, feat_init_idx].long())
-            )
+            cols.append(self.embeddings[feat_init_idx](x[:, feat_init_idx].long()))
         # concat
         post_embeddings = torch.cat(cols, dim=1)
         return post_embeddings
@@ -134,14 +132,14 @@ class CatEmbeddings(nn.Module):
             or (isinstance(spec[0], int) and d_embedding is not None)
         ):
             raise ValueError(
-                'Invalid arguments. Valid combinations are:'
-                ' (1) the first argument is a list of (cardinality, embedding)-tuples '
-                'AND d_embedding is None'
-                ' (2) the first argument is a list of cardinalities AND d_embedding is '
-                'an integer'
+                "Invalid arguments. Valid combinations are:"
+                " (1) the first argument is a list of (cardinality, embedding)-tuples "
+                "AND d_embedding is None"
+                " (2) the first argument is a list of cardinalities AND d_embedding is "
+                "an integer"
             )
         if stack and d_embedding is None:
-            raise ValueError('stack can be True only when d_embedding is not None')
+            raise ValueError("stack can be True only when d_embedding is not None")
 
         super().__init__()
         spec_ = cast(
@@ -355,7 +353,7 @@ def make_module(spec: ModuleSpec, *args, **kwargs) -> nn.Module:
     elif isinstance(spec, dict):
         assert not (set(spec) & set(kwargs))
         spec = spec.copy()
-        return make_module(spec.pop('type'), *args, **spec, **kwargs)
+        return make_module(spec.pop("type"), *args, **spec, **kwargs)
     elif callable(spec):
         return spec(*args, **kwargs)
     else:
@@ -373,7 +371,7 @@ def default_zero_weight_decay_condition(
     module_name: str, module: nn.Module, parameter_name: str, parameter: Parameter
 ):
     del module_name, parameter
-    return parameter_name.endswith('bias') or isinstance(
+    return parameter_name.endswith("bias") or isinstance(
         module,
         (
             nn.BatchNorm1d,
@@ -394,32 +392,32 @@ def make_parameter_groups(
     custom_fullnames.update(*custom_groups)
     assert sum(map(len, custom_groups)) == len(
         custom_fullnames
-    ), 'Custom parameter groups must not intersect'
+    ), "Custom parameter groups must not intersect"
 
     parameters_info = {}  # fullname -> (parameter, needs_wd)
     for module_name, module in model.named_modules():
         for name, parameter in module.named_parameters():
-            fullname = f'{module_name}.{name}' if module_name else name
+            fullname = f"{module_name}.{name}" if module_name else name
             parameters_info.setdefault(fullname, (parameter, []))[1].append(
                 not zero_weight_decay_condition(module_name, module, name, parameter)
             )
     parameters_info = {k: (v[0], all(v[1])) for k, v in parameters_info.items()}
 
-    params_with_wd = {'params': []}
-    params_without_wd = {'params': [], 'weight_decay': 0.0}
-    custom_params = {k: {'params': []} | v for k, v in custom_groups.items()}
+    params_with_wd = {"params": []}
+    params_without_wd = {"params": [], "weight_decay": 0.0}
+    custom_params = {k: {"params": []} | v for k, v in custom_groups.items()}
 
     for fullname, (parameter, needs_wd) in parameters_info.items():
         for fullnames, group in custom_params.items():
             if fullname in fullnames:
                 custom_fullnames.remove(fullname)
-                group['params'].append(parameter)
+                group["params"].append(parameter)
                 break
         else:
-            (params_with_wd if needs_wd else params_with_wd)['params'].append(parameter)
+            (params_with_wd if needs_wd else params_with_wd)["params"].append(parameter)
     assert (
         not custom_fullnames
-    ), f'Some of the custom parameters were not found in the model: {custom_fullnames}'
+    ), f"Some of the custom parameters were not found in the model: {custom_fullnames}"
     return [params_with_wd, params_without_wd] + list(custom_params.values())
 
 
@@ -441,9 +439,9 @@ def make_optimizer(
 
 
 def get_lr(optimizer: optim.Optimizer) -> float:
-    return next(iter(optimizer.param_groups))['lr']
+    return next(iter(optimizer.param_groups))["lr"]
 
 
 def set_lr(optimizer: optim.Optimizer, lr: float) -> None:
     for group in optimizer.param_groups:
-        group['lr'] = lr
+        group["lr"] = lr

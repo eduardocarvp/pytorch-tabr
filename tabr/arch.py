@@ -129,7 +129,9 @@ class TabR(nn.Module):
             nn.Linear(output_dim, d_main)
             if embed_target is False
             else nn.Sequential(
-                nn.Embedding(output_dim, d_main),  # delu.nn.Lambda(lambda x: x.squeeze(-2))
+                nn.Embedding(
+                    output_dim, d_main
+                ),  # delu.nn.Lambda(lambda x: x.squeeze(-2))
             )
         )
         self.K = nn.Linear(d_main, d_main)

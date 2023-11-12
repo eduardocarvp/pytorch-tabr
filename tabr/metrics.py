@@ -463,11 +463,7 @@ class UnsupervisedNumpyMetric(Metric):
         float
             MSE of predictions vs targets.
         """
-        return UnsupervisedLossNumpy(
-            y_pred,
-            embedded_x,
-            obf_vars
-        )
+        return UnsupervisedLossNumpy(y_pred, embedded_x, obf_vars)
 
 
 class RMSE(Metric):
