@@ -2,7 +2,8 @@
 
 ## Overview
 
-pytorch-tabr is a Python package that provides a PyTorch implementation of TabR, a deep learning model for tabular data. This package allows for easy and efficient modeling of both classification and regression tasks using tabular data. It includes support for various kinds of embeddings and customizations to cater to different types of tabular datasets.
+pytorch-tabr is a Python package that provides a PyTorch wrapper implementation of TabR, a deep learning model for tabular data. The original implementation can be found here:
+[TabR: Unlocking the Power of Retrieval-Augmented Tabular Deep Learning](https://github.com/yandex-research/tabular-dl-tabr) This package allows for easy and efficient modeling of both classification and regression tasks using tabular data. It includes support for various kinds of embeddings and customizations to cater to different types of tabular datasets.
 
 ## Features
 
