@@ -10,7 +10,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from tabr.embeddings import OneHotEncoder, make_module, EmbeddingGenerator
-from tabr.utils import define_device
 
 
 class TabR(nn.Module):

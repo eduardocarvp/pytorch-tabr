@@ -8,14 +8,7 @@ from tabr.base_model import TabRBase
 from tabr.utils import infer_output_dim, check_output_dim
 from tabr.dataloader import (
     SparsePredictDataset,
-    PredictDataset,
-    validate_eval_set,
-    create_dataloaders,
-    define_device,
-    ComplexEncoder,
-    check_input,
-    check_warm_start,
-    check_embedding_parameters,
+    PredictDataset
 )
 
 
