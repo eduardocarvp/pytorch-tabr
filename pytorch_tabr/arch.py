@@ -13,6 +13,92 @@ from pytorch_tabr.embeddings import OneHotEncoder, make_module, EmbeddingGenerat
 
 
 class TabR(nn.Module):
+    """
+    A neural network module for tabular data representation, built upon PyTorch's nn.Module.
+    This class, TabR, is designed for both classification and regression tasks, and it can
+    handle categorical, binary, and numerical features with a variety of encoding and embedding options.
+
+    Parameters
+    ----------
+    dim_input : int
+        The dimension of the input data.
+    cat_indices : list[int]
+        List of indices for categorical features.
+    cat_cardinalities : list[int]
+        List of cardinalities for each categorical feature.
+    bin_indices : list[int]
+        List of indices for binary features.
+    output_dim : Optional[int]
+        Dimension of the output. If set to None, it's inferred based on other parameters.
+    embed_target : bool, optional
+        Flag to determine whether to embed the target variable. Defaults to True.
+    type_embeddings : str, optional
+        Type of embeddings to be used for categorical features. Can be 'one-hot' or 'embeddings'.
+    cat_emb_dims : int, optional
+        Dimension of the embedding for each categorical feature. Defaults to 2.
+    num_embeddings : Optional[dict], optional
+        A dictionary specifying embedding details for numerical features.
+    d_main : int, optional
+        Dimension of the main layers in the network. Defaults to 96.
+    d_multiplier : float, optional
+        Multiplier for scaling the block dimensions. Defaults to 2.0.
+    encoder_n_blocks : int, optional
+        Number of blocks in the encoder. Defaults to 2.
+    predictor_n_blocks : int, optional
+        Number of blocks in the predictor. Defaults to 2.
+    mixer_normalization : Union[bool, Literal["auto"]], optional
+        Determines whether to apply normalization in the mixer. Can be a boolean or 'auto'. Defaults to 'auto'.
+    context_dropout : float, optional
+        Dropout rate for the context layer. Defaults to 0.
+    dropout0 : float, optional
+        Dropout rate for the first layer. Defaults to 0.5.
+    dropout1 : Union[float, Literal["dropout0"]], optional
+        Dropout rate for the second layer. Can be a float or 'dropout0'. Defaults to 0.5.
+    normalization : str, optional
+        Type of normalization to use. Defaults to 'LayerNorm'.
+    activation : str, optional
+        Activation function to use. Defaults to 'ReLU'.
+    context_sample_size : int, optional
+        Size of the context sample. Defaults to None.
+    memory_efficient : bool, optional
+        Flag for memory efficiency. Defaults to False.
+    candidate_encoding_batch_size : Optional[int], optional
+        Batch size for encoding candidates. Defaults to None.
+
+    Attributes
+    ----------
+    label_encoder : nn.Module
+        Encoder for the label data.
+    head : nn.Sequential
+        Sequential model forming the head of the network.
+    blocks1 : nn.ModuleList
+        List of modules in the predictor part of the network.
+    normalisation : nn.Module
+        Normalisation layer used in the network.
+    K : nn.Linear
+        Linear layer for key generation.
+    T : nn.Sequential
+        Sequential model for transformation in the context processing.
+    dropout : nn.Dropout
+        Dropout layer for the context.
+
+    Methods
+    -------
+    forward(x: Tensor, y: Optional[Tensor], candidate_x: Tensor, candidate_y: Tensor, context_size: int) -> Tensor
+        Defines the computation performed at every call of the TabR model.
+    reset_parameters()
+        Resets the parameters of the model to their initial state.
+    _encode(x: Tensor) -> tuple[Tensor, Tensor]
+        Encodes the input tensor into feature and key tensors.
+
+    Notes
+    -----
+    - The model is particularly designed for large-scale tabular data and offers various options for customization and optimization.
+    - It includes mechanisms for memory efficiency and dynamic context sampling, allowing it to adapt to different data scales and requirements.
+    - The architecture of the model involves a mix of linear layers, normalization, and dropout layers, along with embedding layers for categorical and numerical data.
+
+    """
+
     def __init__(
         self,
         *,

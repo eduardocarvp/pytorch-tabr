@@ -5,27 +5,15 @@ from typing import Any
 
 import copy
 import faiss.contrib.torch_utils  # noqa  << this line makes faiss work with PyTorch
-import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import scipy
-from scipy.special import softmax
 import warnings
-from torch.utils.data import DataLoader
+import numpy as np
 from tqdm.notebook import tqdm
 from pytorch_tabr.arch import TabR
-from pytorch_tabr.utils import infer_output_dim, check_output_dim
 from pytorch_tabr.dataloader import (
-    SparsePredictDataset,
-    PredictDataset,
     validate_eval_set,
     create_dataloaders,
     define_device,
-    ComplexEncoder,
-    check_input,
-    check_warm_start,
-    check_embedding_parameters,
 )
 from pytorch_tabr.callbacks import (
     CallbackContainer,
@@ -34,11 +22,10 @@ from pytorch_tabr.callbacks import (
     LRSchedulerCallback,
 )
 from pytorch_tabr.metrics import MetricContainer, check_metrics
-from sklearn.metrics import roc_auc_score
 
 
 from sklearn.base import BaseEstimator
-from typing import Literal, Optional, Union
+from typing import Callable, Literal, Optional, Union
 
 KWArgs = dict[str, Any]
 JSONDict = dict[str, Any]  # must be JSON-serializable
@@ -46,6 +33,94 @@ JSONDict = dict[str, Any]  # must be JSON-serializable
 
 @dataclass
 class TabRBase(BaseEstimator):
+    """
+    Base class for the TabR model, providing foundational methods and attributes
+    used in both TabRClassifier and TabRRegressor. It includes methods for setting
+    up the network, optimizer, metrics, callbacks, and conducting training and prediction epochs.
+
+    Attributes
+    ----------
+    cat_indices : list[int]
+        List of indices for categorical features.
+    cat_cardinalities : list[int]
+        List of cardinalities for each categorical feature.
+    bin_indices : list[int]
+        List of indices for binary features.
+    num_embeddings : Optional[dict]
+        Specifications for embedding numerical features.
+    type_embeddings : str
+        Type of embeddings to use for categorical features.
+    cat_emb_dims : int
+        Embedding dimension for categorical features.
+    d_main : int
+        Main dimension size used in network layers.
+    d_multiplier : float
+        Multiplier for scaling dimensions in the network.
+    encoder_n_blocks : int
+        Number of blocks in the encoder.
+    predictor_n_blocks : int
+        Number of blocks in the predictor.
+    mixer_normalization : Union[bool, Literal["auto"]]
+        Flag for mixer normalization, can be a boolean or 'auto'.
+    context_dropout : float
+        Dropout rate for the context layers.
+    dropout0 : float
+        Initial dropout rate.
+    dropout1 : Union[float, Literal["dropout0"]]
+        Secondary dropout rate, can match dropout0.
+    normalization : str
+        Normalization technique used in the network.
+    activation : str
+        Activation function used in the network.
+    device_name : str
+        Name of the device to run computations on.
+    optimizer_fn : Any
+        Function to create the optimizer.
+    optimizer_params : dict
+        Parameters for the optimizer.
+    scheduler_fn : Any
+        Function to create the learning rate scheduler.
+    scheduler_params : dict
+        Parameters for the scheduler.
+    context_size : int
+        Size of the context.
+    context_sample_size : int
+        Sample size for the context.
+    memory_efficient : bool
+        Flag to enable memory efficiency.
+    candidate_encoding_batch_size : Optional[int]
+        Batch size for candidate encoding.
+    seed : int
+        Random seed for reproducibility.
+    verbose : int
+        Verbosity level.
+
+    Methods
+    -------
+    __post_init__(self):
+        Initializes the model, sets the device, and creates copies of mutable parameters.
+    _set_optimizer(self):
+        Sets up the optimizer for the model.
+    _set_network(self):
+        Configures and initializes the neural network model.
+    _set_metrics(self, metrics, eval_names):
+        Sets the metrics for model evaluation.
+    _set_callbacks(self, custom_callbacks):
+        Initializes callback functions for training.
+    fit(self, X_train, y_train, ...):
+        Fits the model to the training data.
+    _predict_epoch(self, name, loader):
+        Conducts predictions for an epoch.
+    _predict_batch(self, X):
+        Predicts a single batch of data.
+    _train_epoch(self, train_loader):
+        Trains the model for one epoch.
+    _train_batch(self, X, y, candidate_x, candidate_y, context_size):
+        Trains the model on a single batch.
+    predict(self, X):
+        Generates predictions for the given input data.
+    """
+
     cat_indices: list[int] = field(default_factory=list)
     cat_cardinalities: list[int] = field(default_factory=list)
     bin_indices: list[int] = field(default_factory=list)
@@ -199,20 +274,58 @@ class TabRBase(BaseEstimator):
 
     def fit(
         self,
-        X_train,
-        y_train,
-        eval_set=None,
-        eval_name=None,
-        eval_metric=None,
-        max_epochs=100,
-        patience=10,
-        batch_size=256,
-        num_workers=0,
-        callbacks=None,
-        drop_last=True,
-        pin_memory=True,
-        warm_start=False,
-    ):
+        X_train: Union[np.ndarray, torch.Tensor],
+        y_train: Union[np.ndarray, torch.Tensor],
+        eval_set: Optional[list[tuple[np.ndarray, np.ndarray]]] = None,
+        eval_name: Optional[list[str]] = None,
+        eval_metric: Optional[list[str]] = None,
+        max_epochs: int = 100,
+        patience: int = 10,
+        batch_size: int = 256,
+        num_workers: int = 0,
+        callbacks: Optional[list[Callable]] = None,
+        drop_last: bool = True,
+        pin_memory: bool = True,
+        warm_start: bool = False,
+    ) -> None:
+        """
+        Fits the model to the training data.
+
+        Parameters
+        ----------
+        X_train : Union[np.ndarray, torch.Tensor]
+            Training data features.
+        y_train : Union[np.ndarray, torch.Tensor]
+            Training data targets or labels.
+        eval_set : Optional[list[tuple[np.ndarray, np.ndarray]]], optional
+            A list of validation datasets with their corresponding labels.
+        eval_name : Optional[list[str]], optional
+            Names for each of the validation datasets, used for logging purposes.
+        eval_metric : Optional[list[str]], optional
+            List of evaluation metrics to be used.
+        max_epochs : int, optional
+            Maximum number of epochs for training. Defaults to 100.
+        patience : int, optional
+            Number of epochs with no improvement after which training will be stopped. Defaults to 10.
+        batch_size : int, optional
+            Batch size for training. Defaults to 256.
+        num_workers : int, optional
+            Number of workers for data loading. Defaults to 0.
+        callbacks : Optional[list[Callable]], optional
+            List of callback functions for various stages of training. Defaults to None.
+        drop_last : bool, optional
+            Whether to drop the last incomplete batch in each epoch. Defaults to True.
+        pin_memory : bool, optional
+            If True, the data loader will copy tensors into CUDA pinned memory before returning them. Defaults to True.
+        warm_start : bool, optional
+            If True, training will start from the most recent state. Defaults to False.
+
+        Notes
+        -----
+        This method handles the complete process of fitting the model to the training data.
+        It includes setting up the data loaders, updating fit parameters, initializing the network,
+        and iterating through epochs of training and validation. Callbacks are invoked at the appropriate stages.
+        """
         self.max_epochs = max_epochs
         self.patience = patience
         self.batch_size = batch_size
@@ -305,7 +418,6 @@ class TabRBase(BaseEstimator):
         y_true, scores = self.stack_batches(list_y_true, list_y_score)
 
         metrics_logs = self._metric_container_dict[name](y_true, scores)
-        print(metrics_logs)
         self.network.train()
         self.history.epoch_metrics.update(metrics_logs)
         return
@@ -343,6 +455,20 @@ class TabRBase(BaseEstimator):
         return scores
 
     def _train_epoch(self, train_loader):
+        """
+        Conducts the training process for one epoch using the given DataLoader.
+
+        Parameters
+        ----------
+        train_loader : DataLoader
+            DataLoader providing batches of training data.
+
+        Notes
+        -----
+        This method iterates over the batches in the DataLoader, performing training on each batch.
+        It also handles the callback for the end of each batch.
+        """
+
         self.network.train()
 
         for batch_idx, (indices, X, y) in enumerate(
@@ -358,6 +484,31 @@ class TabRBase(BaseEstimator):
         return
 
     def _train_batch(self, X, y, candidate_x, candidate_y, context_size):
+        """
+        Performs the training operation on a single batch.
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Input features for the batch.
+        y : torch.Tensor
+            Target labels for the batch.
+        candidate_x : torch.Tensor
+            Input features for the candidate set.
+        candidate_y : torch.Tensor
+            Target labels for the candidate set.
+        context_size : int
+            Size of the context to be considered during training.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the batch size and loss for the batch.
+
+        Notes
+        -----
+        This method conducts forward pass, loss calculation, and backpropagation for a single batch.
+        """
         batch_logs = {"batch_size": X.shape[0]}
 
         X = X.to(self.device).float()
