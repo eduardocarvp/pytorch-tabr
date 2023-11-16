@@ -14,9 +14,9 @@ from scipy.special import softmax
 import warnings
 from torch.utils.data import DataLoader
 from tqdm.notebook import tqdm
-from tabr.arch import TabR
-from tabr.utils import infer_output_dim, check_output_dim
-from tabr.dataloader import (
+from pytorch_tabr.arch import TabR
+from pytorch_tabr.utils import infer_output_dim, check_output_dim
+from pytorch_tabr.dataloader import (
     SparsePredictDataset,
     PredictDataset,
     validate_eval_set,
@@ -27,13 +27,13 @@ from tabr.dataloader import (
     check_warm_start,
     check_embedding_parameters,
 )
-from tabr.callbacks import (
+from pytorch_tabr.callbacks import (
     CallbackContainer,
     History,
     EarlyStopping,
     LRSchedulerCallback,
 )
-from tabr.metrics import MetricContainer, check_metrics
+from pytorch_tabr.metrics import MetricContainer, check_metrics
 from sklearn.metrics import roc_auc_score
 
 

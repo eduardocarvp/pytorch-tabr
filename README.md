@@ -23,7 +23,7 @@ pip install pytorch-tabr
 ### Basic example
 
 ```python
-from tabr import TabRClassifier, TabRRegressor
+from pytorch_tabr import TabRClassifier, TabRRegressor
 
 # For a classification task
 classifier = TabRClassifier(cat_indices=[0, 2], cat_cardinalities=[3, 5])

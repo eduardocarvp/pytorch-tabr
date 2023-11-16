@@ -1,4 +1,4 @@
-from tabr.models import (
+from pytorch_tabr.models import (
     TabRClassifier,
     TabRRegressor,
 )

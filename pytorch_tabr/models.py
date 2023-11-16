@@ -4,9 +4,9 @@ import torch
 import torch.nn.functional as F
 from scipy.special import softmax
 from torch.utils.data import DataLoader
-from tabr.base_model import TabRBase
-from tabr.utils import infer_output_dim, check_output_dim
-from tabr.dataloader import (
+from pytorch_tabr.base_model import TabRBase
+from pytorch_tabr.utils import infer_output_dim, check_output_dim
+from pytorch_tabr.dataloader import (
     SparsePredictDataset,
     PredictDataset
 )

@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from tabr.embeddings import OneHotEncoder, make_module, EmbeddingGenerator
+from pytorch_tabr.embeddings import OneHotEncoder, make_module, EmbeddingGenerator
 
 
 class TabR(nn.Module):

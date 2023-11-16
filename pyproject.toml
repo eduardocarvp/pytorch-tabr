@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "pytorch-tabr"
+name = "pytorch_tabr"
 version = "0.1.0"
 description = ""
-authors = ["Eduardo Carvalho Pinto <eduardo.carvalho-pinto@ubisoft.com>"]
+authors = ["Eduardo Carvalho Pinto"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
