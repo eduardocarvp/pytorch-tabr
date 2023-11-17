@@ -161,6 +161,13 @@ class EarlyStopping(Callback):
                 + f"best_{self.early_stopping_metric} = {round(self.best_loss, 5)}"
             )
             print(msg)
+        elif self.wait < self.patience:
+            msg = f"\nModel stopped manually"
+            msg += (
+                f" with best_epoch = {self.best_epoch} and "
+                + f"best_{self.early_stopping_metric} = {round(self.best_loss, 5)}"
+            )
+            print(msg)
         else:
             msg = (
                 f"Stop training because you reached max_epochs = {self.trainer.max_epochs}"
@@ -169,7 +176,7 @@ class EarlyStopping(Callback):
             )
             print(msg)
         wrn_msg = "Best weights from best epoch are automatically used!"
-        warnings.warn(wrn_msg)
+        print(wrn_msg)
 
 
 @dataclass

@@ -369,22 +369,27 @@ class TabRBase(BaseEstimator):
 
         self._callback_container.on_train_begin()
 
-        for epoch in tqdm(range(max_epochs), desc=" epochs", position=0):
-            self._callback_container.on_epoch_begin(epoch)
+        try:
+            for epoch in tqdm(range(max_epochs), desc=" epochs", position=0):
+                self._callback_container.on_epoch_begin(epoch)
 
-            self._train_epoch(train_dataloader)
+                self._train_epoch(train_dataloader)
 
-            # Apply predict epoch to all eval sets
-            for eval_name, valid_dataloader in zip(eval_names, valid_dataloaders):
-                self._predict_epoch(eval_name, valid_dataloader)
+                # Apply predict epoch to all eval sets
+                for eval_name, valid_dataloader in zip(eval_names, valid_dataloaders):
+                    self._predict_epoch(eval_name, valid_dataloader)
 
-            # Call method on_epoch_end for all callbacks
-            self._callback_container.on_epoch_end(
-                epoch, logs=self.history.epoch_metrics
-            )
+                # Call method on_epoch_end for all callbacks
+                self._callback_container.on_epoch_end(
+                    epoch, logs=self.history.epoch_metrics
+                )
 
-            if self._stop_training:
-                break
+                if self._stop_training:
+                    break
+        except KeyboardInterrupt:
+            print("Training stopped. Calling callbacks...")
+            # self._callback_container.on_train_end()
+            # self.network.eval()
 
         # Call method on_train_end for all callbacks
         self._callback_container.on_train_end()
