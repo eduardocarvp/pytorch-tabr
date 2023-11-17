@@ -10,7 +10,6 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -18,25 +17,46 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10' # Specify the Python version
+        python-version: '3.10'
 
-    # - name: Cache Poetry virtualenv
-    #   uses: actions/cache@v4
-    #   with:
-    #     path: ~/.cache/pypoetry/virtualenvs
-    #     key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
-    #     restore-keys: |
-    #       ${{ runner.os }}-poetry-
+    - name: Install Poetry
+      run: pip install poetry
 
+    - name: Get Poetry cache directory
+      run: echo "POETRY_CACHE_DIR=$(poetry config cache-dir)" >> $GITHUB_ENV
+
+    - name: Cache Poetry virtualenv
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.POETRY_CACHE_DIR }}
+        key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-poetry-
     - name: Install dependencies
-      run: |
-        pip install poetry
-        poetry install
+      run: poetry install
 
   test:
     needs: build
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install Poetry
+      run: pip install poetry
+
+    - name: Get Poetry cache directory
+      run: echo "POETRY_CACHE_DIR=$(poetry config cache-dir)" >> $GITHUB_ENV
+
+    - name: Restore Poetry virtualenv from cache
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.POETRY_CACHE_DIR }}
+        key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+
     - name: Run tests
-      run: poetry run python -m pytest # or your test command
+      run: poetry run python -m pytest
