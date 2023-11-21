@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from pytorch_tabr.embeddings import OneHotEncoder, make_module, EmbeddingGenerator
+from pytorch_tabr.sparsemax import entmax15
 
 
 class TabR(nn.Module):
@@ -411,6 +412,7 @@ class TabR(nn.Module):
             - context_k.square().sum(-1)
         )
         probs = F.softmax(similarities, dim=-1)
+        # probs = entmax15(similarities)
         probs = self.dropout(probs)
 
         context_y_emb = self.label_encoder(candidate_y[context_idx][..., None])
