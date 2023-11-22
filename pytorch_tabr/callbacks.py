@@ -147,6 +147,14 @@ class EarlyStopping(Callback):
                 self.trainer._stop_training = True
             self.wait += 1
 
+        # Add to the list anyways
+        self.trainer.models.append(
+            (current_loss, copy.deepcopy(self.trainer.network.state_dict()))
+        )
+        self.trainer.models = sorted(
+            self.trainer.models, key=lambda x: -x[0] if self.is_maximize else x[0]
+        )[: self.trainer.n_keep_models]
+
     def on_train_end(self, logs=None):
         self.trainer.best_epoch = self.best_epoch
         self.trainer.best_cost = self.best_loss
