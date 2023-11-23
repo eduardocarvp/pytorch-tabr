@@ -269,6 +269,8 @@ class TabRBase(BaseEstimator):
             callbacks.extend(custom_callbacks)
         self._callback_container = CallbackContainer(callbacks)
         self._callback_container.set_trainer(self)
+        self.n_keep_models = 5
+        self.models = []
 
         return
 
