@@ -130,8 +130,8 @@ class TabR(nn.Module):
         memory_efficient: bool = False,
         candidate_encoding_batch_size: Optional[int] = None,
     ) -> None:
-        if not memory_efficient:
-            assert candidate_encoding_batch_size is None
+        # if not memory_efficient:
+        #     assert candidate_encoding_batch_size is None
         if mixer_normalization == "auto":
             mixer_normalization = encoder_n_blocks > 0
         if encoder_n_blocks == 0:
