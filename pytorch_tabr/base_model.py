@@ -90,6 +90,8 @@ class TabRBase(BaseEstimator):
         Flag to enable memory efficiency.
     candidate_encoding_batch_size : Optional[int]
         Batch size for candidate encoding.
+    selection_function_name: str
+        Name of the function selecting the similarities.
     seed : int
         Random seed for reproducibility.
     verbose : int
@@ -146,6 +148,7 @@ class TabRBase(BaseEstimator):
     context_sample_size: int = None
     memory_efficient: bool = False
     candidate_encoding_batch_size: Optional[int] = None
+    selection_function_name: str = "softmax"
     device_name: str = "cpu"
     seed: int = 0
     verbose: int = 0
@@ -192,6 +195,7 @@ class TabRBase(BaseEstimator):
             context_sample_size=self.context_sample_size,
             memory_efficient=self.memory_efficient,
             candidate_encoding_batch_size=self.candidate_encoding_batch_size,
+            selection_function_name=self.selection_function_name,
         ).to(self.device)
         return
 

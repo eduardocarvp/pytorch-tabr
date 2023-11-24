@@ -8,9 +8,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from functools import partial
 from torch import Tensor
 from pytorch_tabr.embeddings import OneHotEncoder, make_module, EmbeddingGenerator
-from pytorch_tabr.sparsemax import entmax15
+from pytorch_tabr.sparsemax import entmax15, sparsemax
 
 
 class TabR(nn.Module):
@@ -65,7 +66,9 @@ class TabR(nn.Module):
         Flag for memory efficiency. Defaults to False.
     candidate_encoding_batch_size : Optional[int], optional
         Batch size for encoding candidates. Defaults to None.
-
+    selection_function_name: str, optional
+        Softmax like function for selecting similarities. Options are
+        "softmax", "entmax" or "sparsemax".
     Attributes
     ----------
     label_encoder : nn.Module
@@ -125,6 +128,7 @@ class TabR(nn.Module):
         normalization: str = "LayerNorm",
         activation: str = "ReLU",
         context_sample_size: int = None,
+        selection_function_name: str = "softmax",
         #
         # The following options should be used only when truly needed.
         memory_efficient: bool = False,
@@ -245,7 +249,18 @@ class TabR(nn.Module):
         self.search_index = None
         self.memory_efficient = memory_efficient
         self.candidate_encoding_batch_size = candidate_encoding_batch_size
+        self.selection_function = self._get_selection_function(selection_function_name)
         self.reset_parameters()
+
+    def _get_selection_function(self, selection_function):
+        if selection_function == "softmax":
+            return partial(F.softmax, dim=-1)
+        elif selection_function == "entmax":
+            return entmax15
+        elif selection_function == "sparsemax":
+            return sparsemax
+        else:
+            raise ValueError("Selection function not supported.")
 
     def reset_parameters(self):
         if isinstance(self.label_encoder, nn.Linear):
@@ -411,8 +426,7 @@ class TabR(nn.Module):
             + (2 * (k[..., None, :] @ context_k.transpose(-1, -2))).squeeze(-2)
             - context_k.square().sum(-1)
         )
-        probs = F.softmax(similarities, dim=-1)
-        # probs = entmax15(similarities)
+        probs = self.selection_function(similarities)
         probs = self.dropout(probs)
 
         context_y_emb = self.label_encoder(candidate_y[context_idx][..., None])
